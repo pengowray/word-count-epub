@@ -16,14 +16,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const resetBtn = document.getElementById('reset-btn');
     const backLink = document.getElementById('back-link');
     const runningToggle = document.getElementById('running-toggle');
+    const chapterPageToggle = document.getElementById('chapter-page-toggle');
     const extrasToggleWrapper = document.getElementById('extras-toggle-wrapper');
     const extrasToggle = document.getElementById('extras-toggle');
     const countHeader = document.getElementById('count-header');
+    const pagesHeader = document.getElementById('pages-header');
+    const pagesLabel = document.getElementById('pages-label');
     const readingTimeEl = document.getElementById('reading-time');
     const readingTimeLabel = document.getElementById('reading-time-label');
     const wpmControl = document.getElementById('wpm-control');
     const wpmInput = document.getElementById('wpm-input');
     const wpmApply = document.getElementById('wpm-apply');
+    const totalPagesEl = document.getElementById('total-pages');
+    const pagesControl = document.getElementById('pages-control');
+    const pagesInput = document.getElementById('pages-input');
+    const pagesApply = document.getElementById('pages-apply');
 
     // library: [{ file, results?, error? }, ...] — populated by handleFiles,
     // survives library ⇄ detail navigation so back-button restores the table.
@@ -32,9 +39,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentResults = null;
     let cameFromLibrary = false;
     let wpm = 250;
+    let words_per_page = 275;
     let showRunningTotals = false;
+    let chapterNewPage = true;
     let includeExtras = false;
     let showLibraryFilenames = false;
+
+    updatePagesLabel();
 
     dropZone.addEventListener('click', () => fileInput.click());
 
@@ -101,6 +112,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    chapterPageToggle.addEventListener('change', () => {
+        chapterNewPage = chapterPageToggle.checked;
+        if (currentResults) {
+            updateSummary(currentResults, false);
+            renderTable(currentResults);
+        }
+    });
+
     extrasToggle.addEventListener('change', () => {
         includeExtras = extrasToggle.checked;
         refreshResultsView(false);
@@ -132,6 +151,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    totalPagesEl.addEventListener('click', () => {
+        pagesControl.classList.toggle('hidden');
+        if (!pagesControl.classList.contains('hidden')) {
+            pagesInput.focus();
+            pagesInput.select();
+        }
+    });
+
+    pagesApply.addEventListener('click', () => {
+        const nextValue = Number.parseInt(pagesInput.value, 10);
+        if (!Number.isFinite(nextValue) || nextValue <= 0) {
+            return;
+        }
+        words_per_page = Math.min(Math.max(nextValue, 100), 1000);
+        pagesInput.value = words_per_page;
+        updatePagesLabel();
+        if (currentResults) {
+            updateSummary(currentResults, false);
+            renderTable(currentResults);
+        }
+        pagesControl.classList.add('hidden');
+    });
+
+    pagesInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            pagesApply.click();
+        }
+    });
+
     function showUploadView() {
         fileInput.value = '';
         resultsSection.classList.add('hidden');
@@ -139,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadSection.classList.remove('hidden');
         progressBar.style.width = '0%';
         wpmControl.classList.add('hidden');
+        pagesControl.classList.add('hidden');
         cameFromLibrary = false;
         // Leave library/baseResults intact so forward-nav still works.
     }
@@ -336,25 +385,43 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateSummary(results, animate) {
+        const totalPages = estimateTotalPages(results);
         if (animate) {
             animateValue('total-words', 0, results.totalWords, 1000);
             animateValue('total-chapters', 0, results.chapters.length, 1000);
+            animateValue('total-pages', 0, totalPages, 1000);
             return;
         }
         document.getElementById('total-words').textContent = results.totalWords.toLocaleString();
         document.getElementById('total-chapters').textContent = results.chapters.length.toLocaleString();
+        document.getElementById('total-pages').textContent = totalPages.toLocaleString();
     }
 
     function updateReadingTime() {
         if (!currentResults) return;
         readingTimeEl.textContent = formatReadingTime(Math.ceil(currentResults.totalWords / wpm));
-        readingTimeLabel.textContent = `Reading Time (${wpm} wpm)`;
+        readingTimeLabel.innerHTML = `Reading Time <span class="nowrap">(${wpm} wpm)</span>`;
     }
 
     function formatReadingTime(minutes) {
         const hours = Math.floor(minutes / 60);
         const rem = minutes % 60;
         return hours > 0 ? `${hours}h ${rem}m` : `${minutes}m`;
+    }
+
+    function estimatePages(words) {
+        return Math.ceil(words / words_per_page);
+    }
+
+    function estimateTotalPages(results) {
+        if (chapterNewPage) {
+            return results.chapters.reduce((sum, chapter) => sum + estimatePages(chapter.wordCount), 0);
+        }
+        return estimatePages(results.totalWords);
+    }
+
+    function updatePagesLabel() {
+        pagesLabel.innerHTML = `Pages <span class="nowrap">(${words_per_page} words/page)</span>`;
     }
 
     function escapeHtml(s) {
@@ -430,17 +497,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderTable(results) {
         resultsBody.innerHTML = '';
         countHeader.textContent = showRunningTotals ? 'Running Total' : 'Word Count';
+        pagesHeader.textContent = showRunningTotals ? 'Running Pages (est.)' : 'Pages (est.)';
         let runningTotal = 0;
+        let runningPages = 0;
 
         results.chapters.forEach(chapter => {
             runningTotal += chapter.wordCount;
+            const chapterPages = estimatePages(chapter.wordCount);
+            runningPages += chapterPages;
             const displayCount = showRunningTotals ? runningTotal : chapter.wordCount;
+            const displayPages = showRunningTotals
+                ? (chapterNewPage ? runningPages : estimatePages(runningTotal))
+                : chapterPages;
             const percentage = ((displayCount / results.totalWords) * 100).toFixed(1);
             const tr = document.createElement('tr');
 
             tr.innerHTML = `
                 <td>${chapter.title}</td>
                 <td class="text-right">${displayCount.toLocaleString()}</td>
+                <td class="text-right">${displayPages.toLocaleString()}</td>
                 <td class="text-right">${percentage}%</td>
             `;
             resultsBody.appendChild(tr);

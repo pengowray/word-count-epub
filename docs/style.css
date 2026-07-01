@@ -194,7 +194,7 @@ h1 {
 
 .summary-card {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(4, 1fr);
     gap: 1.5rem;
     background-color: var(--card-bg);
     padding: 2rem;
@@ -211,6 +211,12 @@ h1 {
 }
 
 .summary-item .label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 0.3em;
+    min-height: 2.8rem;
     color: var(--text-secondary);
     font-size: 0.875rem;
     text-transform: uppercase;
@@ -224,12 +230,16 @@ h1 {
     color: var(--text-primary);
 }
 
+.label .nowrap {
+    white-space: nowrap;
+}
+
 .value-button {
     background: transparent;
     border: none;
     cursor: pointer;
     padding: 0;
-    line-height: 1.1;
+    font: inherit;
 }
 
 .value-button:hover {
